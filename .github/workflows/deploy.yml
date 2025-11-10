@@ -37,18 +37,18 @@ jobs:
           known_hosts: unnecessary
           
       - name: Adding Known Hosts
-        run: ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
         
       - name: Deploy with rsync
         run: |
           rsync -avz \
             ./ \
-            ${{ env.SSH_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}
+            ${{ env.SSH_USER }}@${{ secrets.VPS_HOST }}:${{ env.DEPLOY_PATH }}
             
       - name: Execute remote commands
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ env.VPS_HOST }}
+          host: ${{ secrets.VPS_HOST }}
           username: ${{ env.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
@@ -74,8 +74,8 @@ jobs:
       - name: Send Telegram Message
         uses: cbrgm/telegram-github-action@v1
         with:
-          token: ${{ env.TELEGRAM_TOKEN }}
-          to: ${{ env.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
           message: |
             "jimeng-api成功!"
             Commit: ${{ github.event.head_commit.message }}
