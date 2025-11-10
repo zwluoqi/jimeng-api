@@ -1,0 +1,81 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]  # 当推送到 main 分支时触发
+  workflow_dispatch:    # 允许手动触发部署
+
+env:
+  SSH_USER: root                            # VPS 用户名
+  VPS_HOST: secrets.VPS_HOST                   # VPS IP地址
+  DEPLOY_PATH: /root/delopy/jimeng-api      # 部署路径
+  TELEGRAM_TOKEN: secrets.TELEGRAM_TOKEN
+  TELEGRAM_CHAT_ID: secrets.TELEGRAM_CHAT_ID
+  
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm install -r
+        
+        
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: unnecessary
+          
+      - name: Adding Known Hosts
+        run: ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
+        
+      - name: Deploy with rsync
+        run: |
+          rsync -avz \
+            ./ \
+            ${{ env.SSH_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}
+            
+      - name: Execute remote commands
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ env.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+            export PATH="$PATH:/usr/local/bin:/usr/bin"
+            source ~/.bashrc
+            which pm2
+            cd ${{ env.DEPLOY_PATH }}
+
+            # 检查 pm2 进程是否存在
+            if pm2 list | grep -q "jimeng-api"; then
+              echo "Process exists, restarting..."
+              pm2 restart ecosystem.config.cjs --env production
+            else
+              echo "Process doesn't exist, creating..."
+              pm2 start ecosystem.config.cjs --env production
+              # 保存 pm2 进程列表，确保服务器重启后进程会自动启动
+              pm2 save
+            fi
+
+      - name: Send Telegram Message
+        uses: cbrgm/telegram-github-action@v1
+        with:
+          token: ${{ env.TELEGRAM_TOKEN }}
+          to: ${{ env.TELEGRAM_CHAT_ID }}
+          message: |
+            "jimeng-api成功!"
+            Commit: ${{ github.event.head_commit.message }}
